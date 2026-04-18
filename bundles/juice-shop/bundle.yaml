@@ -1,15 +1,17 @@
 name: juice-shop
 description: >
-  OWASP Juice Shop as a realistic Node.js workload. Exercises network bind
-  (port 3000), filesystem writes, and the usual Node runtime surface so the
-  scanner produces a representative seccomp + capabilities + apparmor set.
+  OWASP Juice Shop as a realistic Node.js workload. Runs with host
+  networking so the e2e probe (scripts/run-scan.sh drives it) can reach
+  127.0.0.1:3000 while runc --security-scan is live. Graceful SIGTERM
+  after the probe lets the scanner finalize seccomp + capabilities +
+  apparmor profiles.
 
 rootfs:
   kind: docker-export
   image: bkimminich/juice-shop:latest
 
 config:
-  template: ../templates/minimal.config.json
+  template: ../templates/hostnet.config.json
   process:
     args:
       - "node"
@@ -26,10 +28,12 @@ config:
 scan:
   seccomp_hook: auto
   capable: auto
-  duration_sec: 30
+  duration_sec: 90
+  probe_script: tests/e2e_probe.sh
+  probe_ready_timeout_sec: 60
+  grace_term_sec: 15
 
-tests:
-  - tests/juice_shop_ports.bats
+tests: []
 
 expect:
   profiles:

@@ -65,7 +65,16 @@ scripts/
    for the rootfs recipes that are currently supported:
    `busybox-tar | docker-export | tar-url | script`).
 2. Drop any bundle-specific bats files in `bundles/<name>/tests/`.
-3. Commit. The `discover` job in `scan-matrix.yml` picks the new directory
+3. For a networked bundle that needs a live e2e probe (like
+   [bundles/juice-shop/](bundles/juice-shop/bundle.yaml)), point
+   `config.template` at `../templates/hostnet.config.json` (host
+   networking — drops the `network` namespace) and set
+   `scan.probe_script: tests/<name>.sh`. `run-scan.sh` starts runc in
+   background, runs the probe, then sends `SIGTERM` to let the scanner
+   finalize profiles. The probe receives env vars `GEN_DIR`, `OUT_DIR`,
+   `BUNDLE_DIR`, `READY_TIMEOUT`, `CID`, `RUNC_PID`; its exit code is
+   propagated as the scan step result.
+4. Commit. The `discover` job in `scan-matrix.yml` picks the new directory
    up automatically.
 
 ## Infrastructure lifecycle — manual only

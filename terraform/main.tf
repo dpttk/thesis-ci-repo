@@ -65,7 +65,7 @@ resource "yandex_resourcemanager_folder_iam_member" "runner_storage_editor" {
 resource "yandex_storage_bucket" "artifacts" {
   bucket   = var.artifacts_bucket_name
   max_size = 10 * 1024 * 1024 * 1024 # 10 GiB
-  labels   = local.common_labels
+  tags     = local.common_labels
 
   anonymous_access_flags {
     read        = false

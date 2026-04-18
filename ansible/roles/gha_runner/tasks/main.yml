@@ -60,6 +60,8 @@
       --work _work
   args:
     creates: "{{ gha_runner_home }}/.runner"
+  environment:
+    RUNNER_ALLOW_RUNASROOT: "1"
 
 - name: Install runner as systemd service (under root; scanner needs root)
   ansible.builtin.command:
