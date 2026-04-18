@@ -1,0 +1,39 @@
+name: juice-shop
+description: >
+  OWASP Juice Shop as a realistic Node.js workload. Exercises network bind
+  (port 3000), filesystem writes, and the usual Node runtime surface so the
+  scanner produces a representative seccomp + capabilities + apparmor set.
+
+rootfs:
+  kind: docker-export
+  image: bkimminich/juice-shop:latest
+
+config:
+  template: ../templates/minimal.config.json
+  process:
+    args:
+      - "node"
+      - "/juice-shop/build/app.js"
+    env:
+      - "NODE_ENV=ci"
+      - "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    cwd: "/juice-shop"
+    terminal: false
+    user:
+      uid: 0
+      gid: 0
+
+scan:
+  seccomp_hook: auto
+  capable: auto
+  duration_sec: 30
+
+tests:
+  - tests/juice_shop_ports.bats
+
+expect:
+  profiles:
+    seccomp_min_syscalls: 30
+    apparmor_has_include: true
+    capabilities_contains:
+      - CAP_NET_BIND_SERVICE

@@ -1,0 +1,9 @@
+---
+gha_runner_user: ghrunner
+gha_runner_home: /opt/actions-runner
+gha_runner_labels: "self-hosted,linux,runc-scanner,yc"
+# gha_runner_url and gha_runner_token are expected to come from group_vars
+# or ansible-vault (see README). They can also be passed on the CLI:
+#   ansible-playbook -e gha_runner_url=... -e gha_runner_token=...
+gha_runner_url: ""
+gha_runner_token: ""

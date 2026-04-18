@@ -1,0 +1,70 @@
+---
+- name: Install BCC tools and libbpfcc
+  ansible.builtin.apt:
+    name:
+      - bpfcc-tools
+      - libbpfcc
+      - python3-bpfcc
+    state: present
+    update_cache: true
+
+- name: Install AppArmor utilities
+  ansible.builtin.apt:
+    name:
+      - apparmor
+      - apparmor-utils
+    state: present
+
+- name: Install oci-seccomp-bpf-hook (Ubuntu universe)
+  ansible.builtin.apt:
+    name: oci-seccomp-bpf-hook
+    state: present
+  register: oci_hook_apt
+  failed_when: false
+
+- name: Warn if oci-seccomp-bpf-hook is not available via apt
+  ansible.builtin.debug:
+    msg: >-
+      oci-seccomp-bpf-hook not installed via apt
+      ({{ oci_hook_apt.msg | default('unknown reason') }}).
+      Install manually from
+      https://github.com/containers/oci-seccomp-bpf-hook/releases
+      and re-run the playbook.
+  when: oci_hook_apt.failed | default(false)
+
+- name: AppArmor smoke status
+  ansible.builtin.command: aa-status
+  register: aa_status
+  changed_when: false
+  failed_when: false
+
+- name: Show AppArmor status
+  ansible.builtin.debug:
+    var: aa_status.stdout_lines
+
+- name: Deploy dummy AppArmor profile (warmup)
+  ansible.builtin.copy:
+    dest: /etc/apparmor.d/runc-ci-warmup
+    mode: "0644"
+    content: |
+      #include <tunables/global>
+      profile runc-ci-warmup flags=(complain) {
+        #include <abstractions/base>
+      }
+
+- name: Warmup load/unload of dummy AppArmor profile
+  ansible.builtin.shell: |
+    set -e
+    apparmor_parser -r /etc/apparmor.d/runc-ci-warmup
+    apparmor_parser -R /etc/apparmor.d/runc-ci-warmup
+  changed_when: false
+  failed_when: false
+
+- name: Ensure bpf filesystem is mounted
+  ansible.posix.mount:
+    path: /sys/fs/bpf
+    src: bpffs
+    fstype: bpf
+    state: mounted
+    opts: defaults
+  failed_when: false

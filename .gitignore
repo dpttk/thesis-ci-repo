@@ -1,0 +1,34 @@
+# scan outputs
+out/
+*.log
+bin/runc
+bin/SHA256SUMS
+bin/BUILD_INFO.txt
+
+# terraform
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/*.tfvars
+!terraform/*.tfvars.example
+terraform/crash.log
+terraform/crash.*.log
+
+# ansible
+ansible/inventory.ini
+ansible/*.retry
+ansible/.vault_pass
+ansible/roles/gha_runner/files/actions-runner-*.tar.gz
+
+# secrets / keys
+*.pem
+*.key
+!terraform/*.key.example
+sa-key*.json
+
+# editor / os
+.DS_Store
+.idea/
+.vscode/
+*.swp

@@ -1,0 +1,66 @@
+---
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 600
+
+- name: Install base packages
+  ansible.builtin.apt:
+    name:
+      - build-essential
+      - pkg-config
+      - git
+      - curl
+      - ca-certificates
+      - jq
+      - bats
+      - python3
+      - python3-pip
+      - uidmap
+      - "linux-headers-{{ ansible_kernel }}"
+      - libseccomp-dev
+    state: present
+
+- name: Install yq (Go implementation) from tarball
+  ansible.builtin.get_url:
+    url: "https://github.com/mikefarah/yq/releases/download/v4.44.3/yq_linux_amd64"
+    dest: /usr/local/bin/yq
+    mode: "0755"
+
+- name: Install gh CLI repo keyring
+  ansible.builtin.get_url:
+    url: https://cli.github.com/packages/githubcli-archive-keyring.gpg
+    dest: /usr/share/keyrings/githubcli-archive-keyring.gpg
+    mode: "0644"
+
+- name: Add gh CLI apt repo
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/github-cli.list
+    mode: "0644"
+    content: |
+      deb [arch=amd64 signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main
+
+- name: Install gh CLI
+  ansible.builtin.apt:
+    name: gh
+    state: present
+    update_cache: true
+
+- name: Install Go {{ go_version }}
+  ansible.builtin.unarchive:
+    src: "https://go.dev/dl/go{{ go_version }}.linux-amd64.tar.gz"
+    dest: /usr/local
+    remote_src: true
+    creates: "/usr/local/go/bin/go"
+
+- name: Expose /usr/local/go/bin on PATH
+  ansible.builtin.copy:
+    dest: /etc/profile.d/go.sh
+    mode: "0755"
+    content: |
+      export PATH="$PATH:/usr/local/go/bin"
+
+- name: Install aws CLI (for YC Object Storage)
+  ansible.builtin.apt:
+    name: awscli
+    state: present

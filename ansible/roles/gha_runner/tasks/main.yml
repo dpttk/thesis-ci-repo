@@ -1,0 +1,76 @@
+---
+- name: Fail if runner url/token are not provided
+  ansible.builtin.assert:
+    that:
+      - gha_runner_url | length > 0
+      - gha_runner_token | length > 0
+    fail_msg: >-
+      gha_runner_url and gha_runner_token must be provided (e.g. via
+      ansible-vault or -e). gha_runner_url = https://github.com/<owner>/<repo>.
+      Get the registration token from the repo's
+      Settings -> Actions -> Runners -> New self-hosted runner page.
+
+- name: Create runner install dir
+  ansible.builtin.file:
+    path: "{{ gha_runner_home }}"
+    state: directory
+    mode: "0755"
+
+- name: Download GitHub Actions runner tarball
+  ansible.builtin.get_url:
+    url: "https://github.com/actions/runner/releases/download/v{{ gha_runner_version }}/actions-runner-linux-x64-{{ gha_runner_version }}.tar.gz"
+    dest: "{{ gha_runner_home }}/runner.tar.gz"
+    mode: "0644"
+
+- name: Extract runner
+  ansible.builtin.unarchive:
+    src: "{{ gha_runner_home }}/runner.tar.gz"
+    dest: "{{ gha_runner_home }}"
+    remote_src: true
+    creates: "{{ gha_runner_home }}/config.sh"
+
+- name: Install runner service dependencies
+  ansible.builtin.command:
+    cmd: "{{ gha_runner_home }}/bin/installdependencies.sh"
+    creates: "{{ gha_runner_home }}/.runner.deps-installed"
+  changed_when: false
+  register: deps_install
+
+- name: Mark runner deps installed
+  ansible.builtin.file:
+    path: "{{ gha_runner_home }}/.runner.deps-installed"
+    state: touch
+    mode: "0644"
+  when: deps_install is succeeded
+
+- name: Configure runner (one-shot; idempotent-guarded)
+  ansible.builtin.shell: |
+    set -e
+    if [ -f {{ gha_runner_home }}/.runner ]; then
+      exit 0
+    fi
+    cd {{ gha_runner_home }}
+    ./config.sh \
+      --unattended \
+      --replace \
+      --url "{{ gha_runner_url }}" \
+      --token "{{ gha_runner_token }}" \
+      --name "runc-ci-runner" \
+      --labels "{{ gha_runner_labels }}" \
+      --work _work
+  args:
+    creates: "{{ gha_runner_home }}/.runner"
+
+- name: Install runner as systemd service (under root; scanner needs root)
+  ansible.builtin.command:
+    cmd: "./svc.sh install root"
+    chdir: "{{ gha_runner_home }}"
+    creates: "/etc/systemd/system/actions.runner.{{ gha_runner_url | basename }}.runc-ci-runner.service"
+  register: svc_install
+  changed_when: svc_install.rc == 0
+
+- name: Start + enable runner service
+  ansible.builtin.command:
+    cmd: "./svc.sh start"
+    chdir: "{{ gha_runner_home }}"
+  changed_when: true

@@ -1,0 +1,38 @@
+name: busybox-default
+description: >
+  Minimal busybox rootfs with an idle workload that touches the usual
+  process/file/network syscalls just long enough for the scanner to collect
+  profiles. Used as a smoke bundle in the scan matrix.
+
+rootfs:
+  kind: busybox-tar
+  url: https://github.com/docker-library/busybox/raw/dist-amd64/stable/glibc/busybox.tar.xz
+
+config:
+  template: ../templates/minimal.config.json
+  process:
+    args:
+      - "/bin/sh"
+      - "-c"
+      - |
+        hostname
+        id
+        ls / >/dev/null
+        echo hello > /tmp/h
+        cat /tmp/h >/dev/null
+        sleep 3
+    terminal: false
+
+scan:
+  seccomp_hook: auto
+  capable: auto
+  duration_sec: 10
+
+tests:
+  - tests/profile_sanity.bats
+
+expect:
+  profiles:
+    seccomp_min_syscalls: 10
+    apparmor_has_include: true
+    capabilities_contains: []

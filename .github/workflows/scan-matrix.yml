@@ -1,0 +1,158 @@
+name: scan-matrix
+
+# Runs runc --security-scan over every bundle under bundles/ on the
+# self-hosted runner in Yandex Cloud. The runc binary is fetched from the
+# runc-fork repository as a workflow artifact (publish-runc-binary.yml).
+
+on:
+  repository_dispatch:
+    types: [runc-build-available]
+  workflow_dispatch:
+    inputs:
+      runc_ref:
+        description: "runc-fork commit sha to scan"
+        required: true
+      run_id:
+        description: "runc-fork publish-runc-binary run id (optional; auto-resolved if empty)"
+        required: false
+        default: ""
+      runc_repo:
+        description: "runc-fork <owner>/<repo> (optional; defaults to vars.RUNC_FORK_REPO)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      bundles:   ${{ steps.list.outputs.bundles }}
+      runc_ref:  ${{ steps.ref.outputs.runc_ref }}
+      run_id:    ${{ steps.ref.outputs.run_id }}
+      runc_repo: ${{ steps.ref.outputs.runc_repo }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: resolve parameters
+        id: ref
+        env:
+          GH_TOKEN: ${{ secrets.RUNC_ARTIFACTS_TOKEN }}
+          DEFAULT_REPO: ${{ vars.RUNC_FORK_REPO }}
+        run: |
+          set -euo pipefail
+          case "${{ github.event_name }}" in
+            repository_dispatch)
+              runc_repo="${{ github.event.client_payload.repo }}"
+              runc_ref="${{ github.event.client_payload.runc_ref }}"
+              run_id="${{ github.event.client_payload.run_id }}"
+              ;;
+            workflow_dispatch)
+              runc_repo="${{ inputs.runc_repo }}"
+              runc_ref="${{ inputs.runc_ref }}"
+              run_id="${{ inputs.run_id }}"
+              ;;
+            schedule)
+              runc_repo="$DEFAULT_REPO"
+              : "${runc_repo:?vars.RUNC_FORK_REPO must be set for schedule trigger}"
+              runc_ref="$(gh api "repos/${runc_repo}/commits/main" --jq '.sha')"
+              run_id=""
+              ;;
+          esac
+          [[ -z "$runc_repo" ]] && runc_repo="$DEFAULT_REPO"
+          : "${runc_repo:?runc-fork repo not provided}"
+          : "${runc_ref:?runc-fork ref not provided}"
+          echo "runc_repo=$runc_repo" >> "$GITHUB_OUTPUT"
+          echo "runc_ref=$runc_ref"   >> "$GITHUB_OUTPUT"
+          echo "run_id=$run_id"       >> "$GITHUB_OUTPUT"
+          echo "resolved runc=$runc_repo@$runc_ref run_id=$run_id"
+
+      - name: enumerate bundles
+        id: list
+        run: |
+          set -euo pipefail
+          bundles="$(ls bundles | grep -v '^templates$' | jq -R -s -c 'split("\n") | map(select(length>0))')"
+          echo "bundles=$bundles" >> "$GITHUB_OUTPUT"
+          echo "bundles: $bundles"
+
+  scan:
+    needs: discover
+    runs-on: [self-hosted, linux, runc-scanner]
+    strategy:
+      fail-fast: false
+      max-parallel: 1     # BCC + oci-seccomp-bpf-hook: do not run in parallel
+      matrix:
+        bundle: ${{ fromJson(needs.discover.outputs.bundles) }}
+    env:
+      RUNC_REPO:   ${{ needs.discover.outputs.runc_repo }}
+      RUNC_REF:    ${{ needs.discover.outputs.runc_ref }}
+      RUNC_RUN_ID: ${{ needs.discover.outputs.run_id }}
+      GH_TOKEN:    ${{ secrets.RUNC_ARTIFACTS_TOKEN }}
+      YC_STORAGE_ACCESS_KEY: ${{ secrets.YC_STORAGE_ACCESS_KEY }}
+      YC_STORAGE_SECRET_KEY: ${{ secrets.YC_STORAGE_SECRET_KEY }}
+      YC_ARTIFACTS_BUCKET:   ${{ vars.YC_ARTIFACTS_BUCKET }}
+      BUNDLE_NAME: ${{ matrix.bundle }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: fetch runc binary
+        run: scripts/fetch-runc.sh
+
+      - name: prepare bundle
+        run: sudo -E scripts/prepare-bundle.sh bundles/${{ matrix.bundle }}
+
+      - name: run security-scan
+        run: sudo -E scripts/run-scan.sh bundles/${{ matrix.bundle }}
+
+      - name: verify profiles
+        run: sudo -E scripts/verify-profiles.sh bundles/${{ matrix.bundle }}
+
+      - name: per-bundle bats
+        run: |
+          set -euo pipefail
+          export BUNDLE_DIR="$(realpath bundles/${{ matrix.bundle }})"
+          export OUT_DIR="$(realpath out/${{ matrix.bundle }})"
+          export GEN_DIR="$OUT_DIR/generated"
+          tests=$(yq -r '.tests[]' bundles/${{ matrix.bundle }}/bundle.yaml)
+          while read -r t; do
+            [[ -z "$t" ]] && continue
+            sudo -E bats "bundles/${{ matrix.bundle }}/$t"
+          done <<<"$tests"
+
+      - name: upload to object storage
+        if: always()
+        run: |
+          if [[ -n "${YC_STORAGE_ACCESS_KEY:-}" && -n "${YC_ARTIFACTS_BUCKET:-}" ]]; then
+            scripts/upload-artifacts.sh "${{ matrix.bundle }}"
+          else
+            echo "::notice::YC storage credentials not set, skipping object storage upload"
+          fi
+
+      - name: upload workflow artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-${{ matrix.bundle }}
+          path: out/${{ matrix.bundle }}/generated/
+          if-no-files-found: warn
+          retention-days: 14
+
+  aggregate:
+    needs: [discover, scan]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: generated-*
+      - name: job summary
+        run: |
+          scripts/make-summary.sh >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo ""
+            echo "---"
+            echo "- runc-fork: \`${{ needs.discover.outputs.runc_repo }}@${{ needs.discover.outputs.runc_ref }}\`"
+            echo "- trigger:   \`${{ github.event_name }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

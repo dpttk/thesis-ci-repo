@@ -1,0 +1,7 @@
+env            = "prod"
+yc_cloud_id    = "b1g..."
+yc_folder_id   = "b1g..."
+yc_zone        = "ru-central1-a"
+admin_cidr     = "203.0.113.42/32"
+ssh_public_key = "ssh-ed25519 AAAA... runc-ci-admin"
+artifacts_bucket_name = "runc-ci-artifacts-prod-<suffix>"
