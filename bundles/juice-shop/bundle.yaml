@@ -22,8 +22,8 @@ config:
     cwd: "/juice-shop"
     terminal: false
     user:
-      uid: 0
-      gid: 0
+      uid: 65532
+      gid: 65532
 
 scan:
   seccomp_hook: auto
