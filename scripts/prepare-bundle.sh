@@ -56,12 +56,16 @@ case "$ROOTFS_KIND" in
       *) tar -C "$ROOTFS_DIR" -xf "$tmp/rootfs.tar" ;;
     esac
     if [[ "$ROOTFS_KIND" == "busybox-tar" && -x "$ROOTFS_DIR/bin/busybox" ]]; then
-      echo "==> wiring busybox applets"
       mkdir -p "$ROOTFS_DIR"/{bin,sbin,etc,proc,sys,dev,tmp,root,usr/bin,usr/sbin}
       chmod 1777 "$ROOTFS_DIR/tmp"
-      "$ROOTFS_DIR/bin/busybox" --list | while read -r applet; do
-        [[ -e "$ROOTFS_DIR/bin/$applet" ]] || ln -s busybox "$ROOTFS_DIR/bin/$applet" 2>/dev/null || true
-      done
+      if "$ROOTFS_DIR/bin/busybox" --help >/dev/null 2>&1; then
+        echo "==> wiring busybox applets"
+        "$ROOTFS_DIR/bin/busybox" --list | while read -r applet; do
+          [[ -e "$ROOTFS_DIR/bin/$applet" ]] || ln -s busybox "$ROOTFS_DIR/bin/$applet" 2>/dev/null || true
+        done
+      else
+        echo "==> skipping busybox wiring (binary not runnable on host; assuming rootfs is pre-wired)"
+      fi
       [[ -f "$ROOTFS_DIR/etc/passwd" ]] || echo "root:x:0:0:root:/root:/bin/sh" > "$ROOTFS_DIR/etc/passwd"
       [[ -f "$ROOTFS_DIR/etc/group" ]] || echo "root:x:0:" > "$ROOTFS_DIR/etc/group"
     fi

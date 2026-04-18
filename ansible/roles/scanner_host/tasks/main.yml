@@ -15,22 +15,60 @@
       - apparmor-utils
     state: present
 
-- name: Install oci-seccomp-bpf-hook (Ubuntu universe)
+- name: Install build deps for oci-seccomp-bpf-hook
   ansible.builtin.apt:
-    name: oci-seccomp-bpf-hook
+    name:
+      - build-essential
+      - git
+      - clang
+      - llvm
+      - libelf-dev
+      - libbpf-dev
+      - libbpfcc-dev
+      - libseccomp-dev
+      - linux-tools-common
+      - linux-tools-generic
+      - golang-go
+      - pkg-config
     state: present
-  register: oci_hook_apt
-  failed_when: false
+    update_cache: true
 
-- name: Warn if oci-seccomp-bpf-hook is not available via apt
-  ansible.builtin.debug:
-    msg: >-
-      oci-seccomp-bpf-hook not installed via apt
-      ({{ oci_hook_apt.msg | default('unknown reason') }}).
-      Install manually from
-      https://github.com/containers/oci-seccomp-bpf-hook/releases
-      and re-run the playbook.
-  when: oci_hook_apt.failed | default(false)
+- name: Stat oci-seccomp-bpf-hook binary
+  ansible.builtin.stat:
+    path: /usr/local/libexec/oci/hooks.d/oci-seccomp-bpf-hook
+  register: oci_hook_bin
+
+- name: Clone oci-seccomp-bpf-hook source
+  ansible.builtin.git:
+    repo: https://github.com/containers/oci-seccomp-bpf-hook.git
+    dest: /opt/oci-seccomp-bpf-hook
+    version: "{{ oci_hook_version | default('main') }}"
+    force: true
+  when: not oci_hook_bin.stat.exists
+
+- name: Build oci-seccomp-bpf-hook (binary only, skip docs)
+  ansible.builtin.command: make binary
+  args:
+    chdir: /opt/oci-seccomp-bpf-hook
+    creates: /opt/oci-seccomp-bpf-hook/bin/oci-seccomp-bpf-hook
+  environment:
+    PATH: "/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    GO: /usr/local/go/bin/go
+  when: not oci_hook_bin.stat.exists
+
+- name: Ensure hooks.d directory exists
+  ansible.builtin.file:
+    path: /usr/local/libexec/oci/hooks.d
+    state: directory
+    mode: "0755"
+
+- name: Install oci-seccomp-bpf-hook binary
+  ansible.builtin.copy:
+    src: /opt/oci-seccomp-bpf-hook/bin/oci-seccomp-bpf-hook
+    dest: /usr/local/libexec/oci/hooks.d/oci-seccomp-bpf-hook
+    mode: "0755"
+    remote_src: true
+  when: not oci_hook_bin.stat.exists
 
 - name: AppArmor smoke status
   ansible.builtin.command: aa-status

@@ -14,11 +14,11 @@ config:
   template: ../templates/hostnet.config.json
   process:
     args:
-      - "node"
+      - "/nodejs/bin/node"
       - "/juice-shop/build/app.js"
     env:
       - "NODE_ENV=ci"
-      - "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      - "PATH=/nodejs/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
     cwd: "/juice-shop"
     terminal: false
     user:
@@ -30,7 +30,7 @@ scan:
   capable: auto
   duration_sec: 90
   probe_script: tests/e2e_probe.sh
-  probe_ready_timeout_sec: 60
+  probe_ready_timeout_sec: 180
   grace_term_sec: 15
 
 tests: []
