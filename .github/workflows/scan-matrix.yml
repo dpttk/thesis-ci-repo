@@ -103,6 +103,8 @@ jobs:
         run: sudo -E scripts/prepare-bundle.sh bundles/${{ matrix.bundle }}
 
       - name: run security-scan
+        env:
+          RUNC: ${{ github.workspace }}/bin/runc
         run: sudo -E scripts/run-scan.sh bundles/${{ matrix.bundle }}
 
       - name: verify profiles
