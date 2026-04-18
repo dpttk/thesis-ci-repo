@@ -68,3 +68,15 @@
     state: mounted
     opts: defaults
   failed_when: false
+
+- name: Install Docker engine (used by prepare-bundle.sh kind=docker-export)
+  ansible.builtin.apt:
+    name: docker.io
+    state: present
+    update_cache: true
+
+- name: Enable and start docker service
+  ansible.builtin.systemd:
+    name: docker
+    enabled: true
+    state: started

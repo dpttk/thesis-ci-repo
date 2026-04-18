@@ -6,7 +6,7 @@ description: >
 
 rootfs:
   kind: busybox-tar
-  url: https://github.com/docker-library/busybox/raw/dist-amd64/stable/glibc/busybox.tar.xz
+  url: https://github.com/docker-library/busybox/raw/dist-amd64/latest/glibc/amd64/rootfs.tar.gz
 
 config:
   template: ../templates/minimal.config.json
