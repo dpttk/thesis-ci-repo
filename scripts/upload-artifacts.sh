@@ -63,7 +63,7 @@ report="$GEN_DIR/scan-report.md"
     echo "- apparmor.profile: $lines lines"
   fi
   if [[ -s "$GEN_DIR/capable-bpfcc.log" ]]; then
-    caps="$(grep -hoE 'CAP_[A-Z_]+' "$GEN_DIR/capable-bpfcc.log" | sort -u | paste -sd ',' -)"
+    caps="$(grep -hoE 'CAP_[A-Z_]+' "$GEN_DIR/capable-bpfcc.log" 2>/dev/null | sort -u | paste -sd ',' - || true)"
     echo "- capable-bpfcc caps: \`${caps:-<none>}\`"
   fi
 } > "$report"
