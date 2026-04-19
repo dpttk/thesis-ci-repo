@@ -18,24 +18,24 @@ for dir in generated-*; do
 
   if [[ -s "$dir/seccomp.json" ]]; then
     count="$(jq '[.syscalls[]?.names[]?] | length' "$dir/seccomp.json" 2>/dev/null || echo '?')"
-    printf '- seccomp.json: **%s** syscalls\n' "$count"
+    printf -- '- seccomp.json: **%s** syscalls\n' "$count"
   else
-    printf '- seccomp.json: _missing_\n'
+    printf -- '- seccomp.json: _missing_\n'
   fi
 
   if [[ -f "$dir/apparmor.profile" ]]; then
     lines="$(wc -l <"$dir/apparmor.profile" | tr -d ' ')"
-    printf '- apparmor.profile: %s lines\n' "$lines"
+    printf -- '- apparmor.profile: %s lines\n' "$lines"
   else
-    printf '- apparmor.profile: _missing_\n'
+    printf -- '- apparmor.profile: _missing_\n'
   fi
 
   if [[ -s "$dir/capable-bpfcc.log" ]]; then
     caps="$(grep -hoE 'CAP_[A-Z_]+' "$dir/capable-bpfcc.log" 2>/dev/null | sort -u | paste -sd ',' - || true)"
-    printf '- capable-bpfcc caps: `%s`\n' "${caps:-<none>}"
+    printf -- '- capable-bpfcc caps: `%s`\n' "${caps:-<none>}"
   fi
   if [[ -s "$dir/capabilities-from-proc-status.txt" ]]; then
-    printf '- proc status (first lines):\n\n'
+    printf -- '- proc status (first lines):\n\n'
     printf '```\n'
     head -n 6 "$dir/capabilities-from-proc-status.txt"
     printf '```\n\n'
