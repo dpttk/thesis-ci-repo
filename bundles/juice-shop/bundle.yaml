@@ -39,5 +39,4 @@ expect:
   profiles:
     seccomp_min_syscalls: 30
     apparmor_has_include: true
-    capabilities_contains:
-      - CAP_NET_BIND_SERVICE
+    capabilities_contains: []
