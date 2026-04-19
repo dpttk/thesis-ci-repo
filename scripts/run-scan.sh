@@ -150,10 +150,29 @@ wait "$RUNC_PID" 2>/dev/null
 rc_runc=$?
 set -e
 
+dump_runc_streams() {
+  echo "----- runc.stderr (tail 200) -----"
+  tail -n 200 "$GEN_DIR/runc.stderr" 2>/dev/null || echo "(no runc.stderr)"
+  echo "----- runc.stdout (tail 200) -----"
+  tail -n 200 "$GEN_DIR/runc.stdout" 2>/dev/null || echo "(no runc.stdout)"
+  echo "----- end runc streams -----"
+}
+
 # timeout exit codes: 0 (graceful), 124 (timeout), 137 (SIGKILL), 143 (SIGTERM)
 case "$rc_runc" in
-  0|124|137|143) echo "==> runc exit=$rc_runc (accepted)";;
-  *) echo "==> runc exit=$rc_runc (unexpected)"; exit "$rc_runc";;
+  0|124|137|143)
+    echo "==> runc exit=$rc_runc (accepted)"
+    # Even on accepted exits show the stderr tail when probe failed,
+    # so the next debugging round does not require an S3 round-trip.
+    if [[ "$rc_probe" -ne 0 ]]; then
+      dump_runc_streams
+    fi
+    ;;
+  *)
+    echo "==> runc exit=$rc_runc (unexpected)"
+    dump_runc_streams
+    exit "$rc_runc"
+    ;;
 esac
 
 ls -la "$GEN_DIR" || true
