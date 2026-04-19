@@ -6,8 +6,12 @@ runtime itself:
 
 - **Infrastructure**: Terraform code for a dedicated self-hosted runner VM in
   Yandex Cloud plus an Object Storage bucket for scan artifacts.
-- **Host provisioning**: Ansible playbook that installs the BCC toolchain,
-  `oci-seccomp-bpf-hook`, AppArmor utilities, and the GitHub Actions runner.
+- **Host provisioning**: Ansible playbook that delegates the eBPF /
+  AppArmor / cgroup / bpffs / scan-user setup to
+  [`script/setup-scan-host.sh`](https://github.com/dpttk/runc/blob/feat/scanner-v2/script/setup-scan-host.sh)
+  shipped by the runc fork (single source of truth), and adds CI-only
+  bits on top: `oci-seccomp-bpf-hook` source build, Docker for bundle
+  prep, and the GitHub Actions runner.
 - **OCI bundles**: a directory per scenario (`bundles/<name>/bundle.yaml`) that
   describes the root filesystem recipe, `config.json` overrides, scan flags,
   bats test packs, and the validation contract for the generated profiles.

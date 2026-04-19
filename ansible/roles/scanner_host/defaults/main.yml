@@ -1,0 +1,20 @@
+---
+# Source of truth for the runc fork that owns script/setup-scan-host.sh.
+# Override at the play, group_vars, or extra-vars level when the runner
+# needs to track a specific PR/branch.
+runc_fork_repo: "dpttk/runc"
+runc_fork_ref: "feat/scanner-v2"
+
+# When set, scanner_host uploads this local checkout's
+# script/setup-scan-host.sh instead of fetching from raw.githubusercontent.
+# Useful while iterating before pushing the runc fork.
+runc_fork_local_checkout: ""
+
+# Forwarded into setup-scan-host.sh via env vars. Leaving them blank uses
+# the script's defaults (runcscan / 65532).
+runc_scan_user: ""
+runc_scan_uid: ""
+
+# oci-seccomp-bpf-hook source - not covered by setup-scan-host.sh because
+# it is a separate upstream project that we still build from source.
+oci_hook_version: "main"

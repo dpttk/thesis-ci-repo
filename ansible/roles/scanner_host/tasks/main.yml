@@ -1,37 +1,47 @@
 ---
-- name: Install BCC tools and libbpfcc
-  ansible.builtin.apt:
-    name:
-      - bpfcc-tools
-      - libbpfcc
-      - python3-bpfcc
-    state: present
-    update_cache: true
+# Provision the self-hosted runner for runc --security-scan.
+#
+# Most of the apt / eBPF / AppArmor / cgroup / bpffs / scan-user setup
+# is delegated to script/setup-scan-host.sh from the runc fork itself,
+# so a hand-provisioned host and an Ansible-provisioned host stay
+# bit-for-bit identical. Anything CI-specific (oci-seccomp-bpf-hook
+# build, Docker for bundle prep) lives below the script call.
 
-- name: Install AppArmor utilities
-  ansible.builtin.apt:
-    name:
-      - apparmor
-      - apparmor-utils
-    state: present
+- name: Upload setup-scan-host.sh from local runc checkout
+  ansible.builtin.copy:
+    src: "{{ runc_fork_local_checkout }}/script/setup-scan-host.sh"
+    dest: /usr/local/sbin/runc-setup-scan-host.sh
+    mode: "0755"
+  when: runc_fork_local_checkout | length > 0
 
-- name: Install build deps for oci-seccomp-bpf-hook
-  ansible.builtin.apt:
-    name:
-      - build-essential
-      - git
-      - clang
-      - llvm
-      - libelf-dev
-      - libbpf-dev
-      - libbpfcc-dev
-      - libseccomp-dev
-      - linux-tools-common
-      - linux-tools-generic
-      - golang-go
-      - pkg-config
-    state: present
-    update_cache: true
+- name: Fetch setup-scan-host.sh from runc fork on github
+  ansible.builtin.get_url:
+    url: "https://raw.githubusercontent.com/{{ runc_fork_repo }}/{{ runc_fork_ref }}/script/setup-scan-host.sh"
+    dest: /usr/local/sbin/runc-setup-scan-host.sh
+    mode: "0755"
+    force: true
+  when: runc_fork_local_checkout | length == 0
+
+- name: Run runc setup-scan-host.sh
+  ansible.builtin.command: /usr/local/sbin/runc-setup-scan-host.sh
+  environment:
+    SCAN_USER: "{{ runc_scan_user }}"
+    SCAN_UID: "{{ runc_scan_uid }}"
+    SCAN_GID: "{{ runc_scan_uid }}"
+  register: scan_setup
+  # The script always installs/checks; treat "host is ready" tail as
+  # the success marker. We do not try to be clever about "changed":
+  # apt and bpffs lines are explicit enough in the recorded output.
+  changed_when: "'host is ready for runc --security-scan' in scan_setup.stdout"
+  failed_when: scan_setup.rc != 0
+
+- name: Show setup-scan-host.sh output
+  ansible.builtin.debug:
+    var: scan_setup.stdout_lines
+
+# --- oci-seccomp-bpf-hook ----------------------------------------------------
+# Not part of setup-scan-host.sh because it is a separate upstream
+# project; we still need it for the seccomp side of the scan.
 
 - name: Stat oci-seccomp-bpf-hook binary
   ansible.builtin.stat:
@@ -42,7 +52,7 @@
   ansible.builtin.git:
     repo: https://github.com/containers/oci-seccomp-bpf-hook.git
     dest: /opt/oci-seccomp-bpf-hook
-    version: "{{ oci_hook_version | default('main') }}"
+    version: "{{ oci_hook_version }}"
     force: true
   when: not oci_hook_bin.stat.exists
 
@@ -70,42 +80,7 @@
     remote_src: true
   when: not oci_hook_bin.stat.exists
 
-- name: AppArmor smoke status
-  ansible.builtin.command: aa-status
-  register: aa_status
-  changed_when: false
-  failed_when: false
-
-- name: Show AppArmor status
-  ansible.builtin.debug:
-    var: aa_status.stdout_lines
-
-- name: Deploy dummy AppArmor profile (warmup)
-  ansible.builtin.copy:
-    dest: /etc/apparmor.d/runc-ci-warmup
-    mode: "0644"
-    content: |
-      #include <tunables/global>
-      profile runc-ci-warmup flags=(complain) {
-        #include <abstractions/base>
-      }
-
-- name: Warmup load/unload of dummy AppArmor profile
-  ansible.builtin.shell: |
-    set -e
-    apparmor_parser -r /etc/apparmor.d/runc-ci-warmup
-    apparmor_parser -R /etc/apparmor.d/runc-ci-warmup
-  changed_when: false
-  failed_when: false
-
-- name: Ensure bpf filesystem is mounted
-  ansible.posix.mount:
-    path: /sys/fs/bpf
-    src: bpffs
-    fstype: bpf
-    state: mounted
-    opts: defaults
-  failed_when: false
+# --- Docker (bundle prep) ----------------------------------------------------
 
 - name: Install Docker engine (used by prepare-bundle.sh kind=docker-export)
   ansible.builtin.apt:
